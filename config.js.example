@@ -1,0 +1,10 @@
+'use strict';
+
+module.exports = {
+    serverName: 'test server',
+    userIDs: [{ name: 'Jon Smith', email: 'jon@example.com' }],
+    passphrase: 'super long and hard to guess secret',
+    endpoint: 'test.openmprdb.org',
+    points: -1,
+    wait: 120
+};
