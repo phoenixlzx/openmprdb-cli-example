@@ -38,6 +38,18 @@ function syncWait(data, submits) {
     });
 }
 
+function timestamp() {
+    return Math.floor(new Date().getTime() / 1000);
+}
+
+function obj2kv(obj) {
+    let kv = '';
+    for (let k in obj) {
+        kv += `${k}: ${obj[k]}\n`
+    }
+    return kv;
+}
+
 async function generateKeyECC() {
     const { privateKey, publicKey, revocationCertificate } = await openpgp.generateKey({
         type: 'ecc',
@@ -70,7 +82,7 @@ async function saveKey(privateKey, publicKey, revocationCertificate) {
 async function register() {
     const signedClearTextMessage = await pgpSignMessage(`server_name: ${config.serverName}`);
     const publicKey = await fs.readFile('publicKey', 'utf8');
-    apiRegister(JSON.stringify({
+    await apiRegister(JSON.stringify({
         message: signedClearTextMessage,
         public_key: publicKey
     }));
@@ -88,9 +100,25 @@ async function sync() {
             player_uuid: ban.uuid,
             points: -1,
             comment: ban.reason
-        };     
+        };
         await syncWait(data, submits);
     }
+}
+
+async function manual(uuid, points, comment) {
+    let data = obj2kv({
+        uuid: uuidv4(),
+        timestamp: timestamp(),
+        player_uuid: uuid,
+        points: points,
+        comment: comment
+    });
+    await apiPutSubmit(await pgpSignMessage(data));
+}
+
+async function revoke(submit_uuid, comment) {
+    const signedClearTextMessage = await pgpSignMessage(`timestamp: ${timestamp()}\ncomment: ${comment}`);
+    await apiRevokeSubmit(submit_uuid, signedClearTextMessage);
 }
 
 async function prepareList(banlist, submits) {
@@ -112,10 +140,7 @@ async function getSubmits() {
 }
 
 async function finalizeSubmits(data, submits) {
-    let submitText = '';
-    for (let k in data) {
-        submitText += `${k}: ${data[k]}\n`
-    }
+    const submitText = obj2kv(data);
     let signedClearTextMessage = await pgpSignMessage(submitText);
     const res = JSON.parse(await apiPutSubmit(signedClearTextMessage));
     if (res.status) {
@@ -161,6 +186,20 @@ async function apiPutSubmit(data) {
     return await api(options, data);
 }
 
+async function apiRevokeSubmit(submit_uuid, data) {
+    const options = {
+        hostname: config.endpoint,
+        port: 443,
+        path: `/v1/submit/uuid/${submit_uuid}`,
+        method: 'DELETE',
+        headers: {
+            'Content-type': 'text/plain',
+            'Content-Length': Buffer.byteLength(data) // Content-Length is needed for body in DELETE
+        }
+    };
+    return await api(options, data);
+}
+
 async function pgpSignMessage(message) {
     const publicKeyArmored = await fs.readFile('publicKey', 'utf8');
     const privateKeyArmored = await fs.readFile('privateKey', 'utf8');
@@ -180,26 +219,43 @@ async function pgpSignMessage(message) {
 }
 
 switch (argv[0]) {
-    case 'init':
+    case 'init': {
         if (argv[1] === 'ecc') {
             generateKeyECC();
         } else {
             generateKeyRSA();
         }
         break;
+    }
     case 'reg':
-    case 'register':
+    case 'register': {
         register();
         break;
-    case 'sync':
+    }
+    case 'sync': {
         sync();
         break;
-    case 'manual':
-        console.log('TBD');
+    }
+    case 'manual': {
+        // TODO verify input
+        let uuid = argv[1];
+        let points = argv[2];
+        let comment = '';
+        for (let i = 3; i < argv.length; i++) {
+            comment += `${argv[i]} `;
+        }
+        manual(uuid, points, comment);
         break;
-    case 'revoke':
-        console.log('TBD');
+    }
+    case 'revoke': {
+        let submit_uuid = argv[1];
+        let comment = '';
+        for (let i = 2; i < argv.length; i++) {
+            comment += `${argv[i]} `;
+        }
+        revoke(submit_uuid, comment);
         break;
+    }
     default:
         console.log('TBD');
 }
