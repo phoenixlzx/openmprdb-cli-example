@@ -14,3 +14,5 @@ Example client for NyaaCat/OpenMPRDB
 - Generate keypair: `node index.js init`
 - Register on server: `node index.js reg`
 - Synchronize banlist: `node index.js sync`
+- Manually submit: `node index.js manual <player uuid> <point: [-1, -0.1] || [0.1, 1]> <comment>`
+- Revoke submit: `node index.js revoke <submit uuid> <comment>`
